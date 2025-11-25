@@ -3323,7 +3323,22 @@ penguin = [
     { name = "penguin" },
 ]
 sglang = [
+    { name = "compressed-tensors" },
+    { name = "interegular" },
+    { name = "msgspec" },
+    { name = "openai" },
+    { name = "openai-harmony" },
+    { name = "orjson" },
+    { name = "partial-json-parser" },
+    { name = "pybase64" },
+    { name = "python-multipart" },
+    { name = "requests" },
+    { name = "sentencepiece" },
+    { name = "sgl-kernel" },
     { name = "sglang" },
+    { name = "torchao" },
+    { name = "uvloop" },
+    { name = "xgrammar" },
 ]
 vllm = [
     { name = "causal-conv1d" },
@@ -3382,6 +3397,7 @@ requires-dist = [
     { name = "causal-conv1d", marker = "extra == 'automodel'", git = "https://github.com/Dao-AILab/causal-conv1d?tag=v1.5.0.post8" },
     { name = "causal-conv1d", marker = "extra == 'vllm'", git = "https://github.com/Dao-AILab/causal-conv1d?tag=v1.5.0.post8" },
     { name = "colored", specifier = "==2.2.3" },
+    { name = "compressed-tensors", marker = "extra == 'sglang'" },
     { name = "cuda-python", marker = "extra == 'vllm'" },
     { name = "datasets", specifier = ">=4.0.0" },
     { name = "debugpy" },
@@ -3391,6 +3407,7 @@ requires-dist = [
     { name = "flash-attn", marker = "extra == 'mcore'", specifier = "==2.8.1" },
     { name = "flash-attn", marker = "extra == 'vllm'", specifier = "==2.8.1" },
     { name = "hydra-core" },
+    { name = "interegular", marker = "extra == 'sglang'" },
     { name = "mamba-ssm", marker = "extra == 'automodel'", git = "https://github.com/state-spaces/mamba.git?rev=2e16fc3062cdcd4ebef27a9aa4442676e1c7edf4" },
     { name = "mamba-ssm", marker = "extra == 'vllm'", git = "https://github.com/state-spaces/mamba.git?rev=2e16fc3062cdcd4ebef27a9aa4442676e1c7edf4" },
     { name = "math-verify" },
@@ -3398,6 +3415,7 @@ requires-dist = [
     { name = "megatron-bridge", marker = "extra == 'mcore'", editable = "3rdparty/Megatron-Bridge-workspace" },
     { name = "megatron-core", marker = "extra == 'mcore'", editable = "3rdparty/Megatron-LM-workspace" },
     { name = "mlflow", specifier = ">=3.5.0,<3.6.0" },
+    { name = "msgspec", marker = "extra == 'sglang'" },
     { name = "nemo-automodel", marker = "extra == 'automodel'", editable = "3rdparty/Automodel-workspace/Automodel" },
     { name = "ninja" },
     { name = "num2words", specifier = ">=0.5.14" },
@@ -3407,13 +3425,22 @@ requires-dist = [
     { name = "nvidia-nvshmem-cu12", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
     { name = "nvtx" },
     { name = "omegaconf" },
+    { name = "openai", marker = "extra == 'sglang'" },
+    { name = "openai-harmony", marker = "extra == 'sglang'" },
+    { name = "orjson", marker = "extra == 'sglang'" },
+    { name = "partial-json-parser", marker = "extra == 'sglang'" },
     { name = "penguin", marker = "extra == 'penguin'", editable = "3rdparty/Penguin-workspace" },
     { name = "pillow", specifier = ">=11.3.0" },
     { name = "plotly" },
+    { name = "pybase64", marker = "extra == 'sglang'" },
+    { name = "python-multipart", marker = "extra == 'sglang'" },
     { name = "pyzmq" },
     { name = "ray", extras = ["default"], specifier = "==2.49.2" },
+    { name = "requests", marker = "extra == 'sglang'" },
     { name = "rich" },
+    { name = "sentencepiece", marker = "extra == 'sglang'" },
     { name = "setuptools" },
+    { name = "sgl-kernel", marker = "extra == 'sglang'", specifier = "==0.3.17.post1" },
     { name = "sglang", marker = "extra == 'sglang'", specifier = ">=0.4.1" },
     { name = "swanlab" },
     { name = "sympy", specifier = ">=1.14.0" },
@@ -3421,16 +3448,19 @@ requires-dist = [
     { name = "tiktoken" },
     { name = "torch", marker = "sys_platform != 'darwin'", specifier = "==2.8.0", index = "https://download.pytorch.org/whl/cu129" },
     { name = "torch", marker = "sys_platform == 'darwin'", specifier = "==2.8.0", index = "https://pypi.org/simple" },
+    { name = "torchao", marker = "extra == 'sglang'" },
     { name = "torchdata" },
     { name = "torchvision", marker = "sys_platform != 'darwin'", specifier = ">=0.22.0", index = "https://download.pytorch.org/whl/cu129" },
     { name = "torchvision", marker = "sys_platform == 'darwin'", specifier = ">=0.22.0", index = "https://pypi.org/simple" },
     { name = "transformer-engine", extras = ["pytorch"], marker = "extra == 'mcore'", specifier = "==2.8.0" },
     { name = "transformers", specifier = ">=4.55.4" },
     { name = "triton", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')", index = "https://download.pytorch.org/whl/cu129" },
+    { name = "uvloop", marker = "extra == 'sglang'" },
     { name = "vllm", marker = "extra == 'automodel'", specifier = "==0.11.0" },
     { name = "vllm", marker = "extra == 'mcore'", specifier = "==0.11.0" },
     { name = "vllm", marker = "extra == 'vllm'", specifier = "==0.11.0" },
     { name = "wandb" },
+    { name = "xgrammar", marker = "extra == 'sglang'" },
 ]
 provides-extras = ["automodel", "vllm", "sglang", "mcore", "penguin"]
 
@@ -5811,6 +5841,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/bb/71/b6365e6325b3290e14957b2c3a804a529968c77a049b2ed40c095f749707/setuptools-79.0.1.tar.gz", hash = "sha256:128ce7b8f33c3079fd1b067ecbb4051a66e8526e7b65f6cec075dfc650ddfa88", size = 1367909, upload-time = "2025-04-23T22:20:59.241Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0d/6d/b4752b044bf94cb802d88a888dc7d288baaf77d7910b7dedda74b5ceea0c/setuptools-79.0.1-py3-none-any.whl", hash = "sha256:e147c0549f27767ba362f9da434eab9c5dc0045d5304feb602a0af001089fc51", size = 1256281, upload-time = "2025-04-23T22:20:56.768Z" },
+]
+
+[[package]]
+name = "sgl-kernel"
+version = "0.3.17.post1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/57/a2/d2b36e0b8a7b5d88117d8d96c4eb612fe3677069316d444479ff78c73547/sgl_kernel-0.3.17.post1-cp310-abi3-manylinux2014_aarch64.whl", hash = "sha256:330057ad2d239e9363ee9abd85ed445ee1795161c60b7357f9792103121039cc", size = 341776329, upload-time = "2025-11-15T15:39:54.528Z" },
+    { url = "https://files.pythonhosted.org/packages/10/8f/6286c74887c42ee4e888a6c36170ff394185e581fbecce2f1bf5c174b96e/sgl_kernel-0.3.17.post1-cp310-abi3-manylinux2014_x86_64.whl", hash = "sha256:c864e6d6eebcd91e59a71ba781739761a21774f0cb862578381f54f504f93b4a", size = 511995347, upload-time = "2025-11-15T15:41:45.029Z" },
 ]
 
 [[package]]

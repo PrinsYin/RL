@@ -80,6 +80,21 @@ vllm = [
 ]
 sglang = [
   "sglang>=0.4.1",
+  "pybase64",
+  "orjson",
+  "uvloop",
+  "requests",
+  "openai",
+  "partial-json-parser",
+  "sentencepiece",
+  "sgl-kernel==0.3.17.post1",  # Fixed version to match sglang 0.5.5.post3 requirements
+  "compressed-tensors",
+  "msgspec",
+  "python-multipart",
+  "torchao",
+  "xgrammar",
+  "interegular",
+  "openai-harmony",
 ]
 mcore = [
   # also need cudnn (https://developer.nvidia.com/cudnn-downloads?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=20.04&target_type=deb_network)
