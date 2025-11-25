@@ -55,6 +55,9 @@ class PY_EXECUTABLES:
     # Use NeMo-RL direct dependencies and Megatron.
     MCORE = "uv run --locked --extra mcore"
 
+    # Use NeMo-RL direct dependencies and SGLang.
+    SGLANG = "uv run --locked --extra sglang"
+
     # Use Penguin dependencies
     PENGUIN = "uv run --locked --extra penguin"
 
