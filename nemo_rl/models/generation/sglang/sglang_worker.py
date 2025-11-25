@@ -144,7 +144,7 @@ class SGLangGenerationWorker:
         tp_size = len(bundle_indices)
 
         print(
-            f"[SGLang Server] Node {os.environ.get('NODE_RANK', '?')}: "
+            f"[SGLang Server] Rank {self.global_rank}: "
             f"Setting CUDA_VISIBLE_DEVICES={gpu_ids} (tp_size={tp_size})"
         )
 
@@ -191,7 +191,7 @@ class SGLangGenerationWorker:
         self.server_args = server_args
         self.base_url = f"http://{node_ip}:{free_port}"
         
-        print(f"[SGLang Server] Rank {self.global_rank} Starting on {self.base_url}")
+        print(f"[SGLang Worker] Rank {self.global_rank} Starting on {self.base_url}")
         
         self.server_process = self._launch_server_process(server_args)
 
@@ -225,7 +225,7 @@ class SGLangGenerationWorker:
                 try:
                     response = session.get(f"{self.base_url}/health_generate", headers=headers)
                     if response.status_code == 200:
-                        print(f"[SGLang Server] Rank {self.global_rank} Server is ready at {self.base_url}")
+                        print(f"[SGLang Worker] Rank {self.global_rank} Server is ready at {self.base_url}")
                         break
                 except requests.RequestException:
                     pass
@@ -257,7 +257,7 @@ class SGLangGenerationWorker:
                 - unpadded_sequence_lengths: Lengths of each input + generated sequence
         """
         input_lengths = data["input_lengths"]
-        print(f"[SGLang Generation Worker] Rank {self.global_rank} Input lengths: {input_lengths}")
+        print(f"[SGLang Worker] Rank {self.global_rank} Input lengths: {input_lengths}")
 
         pass
 

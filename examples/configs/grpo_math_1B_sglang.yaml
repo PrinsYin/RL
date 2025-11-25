@@ -216,7 +216,7 @@ policy:
     stop_strings: null
     # SGLang specific configuration
     model_path: ${policy.model_name}  # Model path for SGLang server
-    gpus_per_server: 2  # Number of GPUs per SGLang server (tensor parallel size)
+    gpus_per_server: 1  # Number of GPUs per SGLang server (tensor parallel size)
     dtype: ${policy.precision}  # Model precision (bfloat16, float16, etc.)
     context_length: ${policy.max_total_sequence_length}  # Maximum context length
     enable_memory_saver: false  # Enable memory saving optimizations
@@ -278,5 +278,5 @@ logger:
     flush_interval: 10  # How often to flush GPU usage metrics to the loggers (in seconds)
 
 cluster:
-  gpus_per_node: 2
+  gpus_per_node: 1
   num_nodes: 1

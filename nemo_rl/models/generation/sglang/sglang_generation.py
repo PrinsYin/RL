@@ -225,6 +225,8 @@ class SGLangGeneration(GenerationInterface):
             "input_ids and input_lengths are required in data for SGLang generation"
         )
 
+        print(f"[SGLang Generation] Input lengths: {data['input_lengths']}")
+
         # Shard the data across the data parallel servers
         dp_size = self.sharding_annotations.get_axis_size("data_parallel")
         sharded_data: list[SlicedDataDict] = data.shard_by_batch_size(
