@@ -983,7 +983,7 @@ def refit_policy_generation(
                 # Get SGLang server URL to GPU UUIDs mapping
                 print("[sglang refit] Getting SGLang server URL to GPU UUIDs mapping...", flush=True)
                 sglang_url_to_gpu_uuids = policy_generation.get_sglang_url_to_gpu_uuids()
-                print(f"[sglang refit] Found {len(sglang_url_to_gpu_uuids)} SGLang server(s)", flush=True)
+                print(f"[sglang refit] Found {sglang_url_to_gpu_uuids} SGLang server(s)", flush=True)
                 
                 # Stream weights via HTTP
                 # Each training worker will match its GPU UUID to the corresponding SGLang server

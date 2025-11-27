@@ -52,6 +52,9 @@ class PY_EXECUTABLES:
     # Use NeMo-RL direct dependencies and nemo-automodel.
     AUTOMODEL = "uv run --locked --extra automodel"
 
+    # Use NeMo-RL direct dependencies, nemo-automodel, and SGLang.
+    AUTOMODEL_SGLANG = "uv run --locked --extra automodel --extra sglang"
+
     # Use NeMo-RL direct dependencies and Megatron.
     MCORE = "uv run --locked --extra mcore"
 
@@ -506,3 +509,4 @@ class RayVirtualCluster:
         user calls shutdown().
         """
         self.shutdown()
+        
