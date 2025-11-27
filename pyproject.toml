@@ -95,6 +95,7 @@ sglang = [
   "xgrammar",
   "interegular",
   "openai-harmony",
+  "torch-memory-saver",
 ]
 mcore = [
   # also need cudnn (https://developer.nvidia.com/cudnn-downloads?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=20.04&target_type=deb_network)

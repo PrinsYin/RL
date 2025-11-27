@@ -1,7 +1,7 @@
 # GRPO Algorithm Configuration
 grpo:
-  num_prompts_per_step: 32
-  num_generations_per_prompt: 16
+  num_prompts_per_step: 8
+  num_generations_per_prompt: 4
   max_rollout_turns: 1 # for multi-turn rollouts. Math Environments just have 1 turn (answering the question)
   max_num_epochs: 1
   max_num_steps: 1000000
@@ -66,15 +66,15 @@ checkpointing:
   save_consolidated: false
 
 policy:
-  model_name: "Qwen/Qwen2.5-1.5B"
+  model_name: "Qwen/Qwen2.5-0.5B"
   tokenizer:
     name: ${policy.model_name} ## specify if you'd like to use a tokenizer different from the model's default
     chat_template_kwargs: null # can be used to pass kwargs to the chat template, e.g., enable_thinking=true
   hf_config_overrides: {} 
-  train_global_batch_size: 128
-  train_micro_batch_size: 4
-  generation_batch_size: 32 # Only used when generating using HF backend
-  logprob_batch_size: 4
+  train_global_batch_size: 32
+  train_micro_batch_size: 1
+  generation_batch_size: 8 # Only used when generating using HF backend
+  logprob_batch_size: 1
   max_total_sequence_length: 2048
   precision: "bfloat16"
   logprob_chunk_size: null
@@ -86,7 +86,7 @@ policy:
     cpu_offload: False
     sequence_parallel: false
     activation_checkpointing: false
-    tensor_parallel_size: 1
+    tensor_parallel_size: 2
     context_parallel_size: 1
     custom_parallel_plan: null
   
@@ -219,7 +219,9 @@ policy:
     gpus_per_server: 2  # Number of GPUs per SGLang server (tensor parallel size)
     dtype: ${policy.precision}  # Model precision (bfloat16, float16, etc.)
     context_length: ${policy.max_total_sequence_length}  # Maximum context length
-    enable_memory_saver: false  # Enable memory saving optimizations
+    enable_memory_saver: true 
+    max_running_requests: 64
+    mem_fraction_static: 0.4
     skip_server_warmup: true  # Skip server warmup to prevent timeout
     colocated:
       # true: generation shares training GPUs
@@ -261,7 +263,7 @@ env:
 logger:
   log_dir: "logs"  # Base directory for all logs
   num_val_samples_to_print: 0 # Number of validation samples to pretty print on terminal
-  wandb_enabled: false
+  wandb_enabled: true
   tensorboard_enabled: false
   mlflow_enabled: false  # Disable MLflow logging
   swanlab_enabled: false # Disable SwanLab logging
