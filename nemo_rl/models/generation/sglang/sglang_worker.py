@@ -253,6 +253,28 @@ class SGLangGenerationWorker:
         
         self.server_process = self._launch_server_process(server_args)
 
+    def get_base_url(self) -> str:
+        """Get the base URL of this SGLang server."""
+        return self.base_url
+
+    def get_gpu_uuids(self) -> list[str]:
+        """Get list of GPU UUIDs used by this SGLang server.
+        
+        Returns:
+            List of GPU UUIDs (e.g., ["GPU-xxxxx", "GPU-yyyyy"])
+        """
+        from nemo_rl.utils.nvml import get_device_uuid
+        
+        # Get all GPU UUIDs used by this server
+        # SGLang server uses GPUs starting from base_gpu_id with tp_size GPUs
+        gpu_uuids = []
+        for i in range(self.server_args.tp_size):
+            gpu_id = self.server_args.base_gpu_id + i
+            uuid = get_device_uuid(gpu_id)
+            gpu_uuids.append(uuid)
+        
+        return gpu_uuids
+
 
     def _merge_stop_strings(self, batch_stop_strings):
         pass
