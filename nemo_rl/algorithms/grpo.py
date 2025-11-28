@@ -987,6 +987,12 @@ def refit_policy_generation(
                 
                 # Stream weights via HTTP
                 # Each training worker will match its GPU UUID to the corresponding SGLang server
+                # Megatron-style: Flush cache before weight updates
+                print("[sglang refit] Flushing KV cache before weight updates (Megatron-style)...", flush=True)
+                flush_success = policy_generation.invalidate_kv_cache()
+                if not flush_success:
+                    print("[sglang refit] WARNING - Cache flush had issues, but continuing with weight update", flush=True)
+                
                 print("[sglang refit] Starting weight streaming via HTTP...", flush=True)
                 futures_train = policy.stream_weights_via_http(
                     sglang_url_to_gpu_uuids=sglang_url_to_gpu_uuids,

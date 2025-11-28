@@ -262,6 +262,58 @@ class SGLangGenerationWorker:
         """Get the base URL of this SGLang server."""
         return self.base_url
 
+    def invalidate_kv_cache(self) -> bool:
+        """Invalidate KV cache before weight updates (Megatron-style).
+        
+        This flushes the cache before weight updates to clear stale cache.
+        Uses retry logic to handle cases where there are pending requests.
+        
+        Returns:
+            bool: True if flush was successful, False otherwise
+        """
+        if not self.is_model_owner:
+            return True
+        
+        # Only flush from the primary worker (rank 0 in the server group)
+        try:
+            url = f"{self.base_url}/flush_cache"
+            # flush_cache will not return status_code 200 when there are pending requests
+            for attempt in range(60):
+                try:
+                    response = requests.get(url, timeout=10)
+                    if response.status_code == 200:
+                        print(
+                            f"[SGLang Worker] Rank {self.global_rank} Cache flushed successfully "
+                            f"(attempt {attempt + 1})",
+                            flush=True
+                        )
+                        return True
+                except requests.exceptions.ConnectionError as e:
+                    # Server might not be ready yet
+                    if attempt < 5:
+                        time.sleep(1)
+                        continue
+                    raise
+                except Exception as e:
+                    print(
+                        f"[SGLang Worker] Rank {self.global_rank} Error flushing cache "
+                        f"(attempt {attempt + 1}): {e}",
+                        flush=True
+                    )
+                    time.sleep(1)
+                    continue
+            else:
+                raise TimeoutError(
+                    f"Timeout while flushing cache after {60} attempts. "
+                    f"Server may have pending requests."
+                )
+        except Exception as e:
+            print(
+                f"[SGLang Worker] Rank {self.global_rank} Failed to flush cache: {e}",
+                flush=True
+            )
+            return False
+
     def get_gpu_uuids(self) -> list[str]:
         """Get list of GPU UUIDs used by this SGLang server.
         
