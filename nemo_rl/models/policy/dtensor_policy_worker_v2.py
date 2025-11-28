@@ -1757,8 +1757,14 @@ class DTensorPolicyWorkerV2:
         current_device_uuid = self.report_device_id()
 
         def dtensor_params_generator():
-            """Generator that yields (name, tensor) pairs, converting DTensors to local tensors."""
-            for name, tensor in self.model.state_dict().items():
+            """Generator that yields (name, tensor) pairs, converting DTensors to local tensors.
+            
+            Note: We sort by name to ensure deterministic ordering across runs,
+            which is important for consistent weight updates.
+            """
+            # Sort by name to ensure deterministic order
+            state_dict_items = sorted(self.model.state_dict().items(), key=lambda x: x[0])
+            for name, tensor in state_dict_items:
                 if isinstance(tensor, DTensor):
                     # Convert DTensor to full tensor for streaming
                     full_tensor = tensor.full_tensor()
@@ -1770,7 +1776,7 @@ class DTensorPolicyWorkerV2:
                 else:
                     # Convert to target dtype
                     yield name, tensor.to(self.dtype, non_blocking=True).contiguous()
-
+        print(f"[dtensor_policy_worker_v2] Streaming weights to SGLang servers via HTTP API", flush=True)
         # Use the HTTP implementation
         stream_weights_via_http_impl(
             params_generator=dtensor_params_generator(),
@@ -1779,6 +1785,7 @@ class DTensorPolicyWorkerV2:
             worker_name=str(self),
             current_device_uuid=current_device_uuid,
         )
+        print(f"[dtensor_policy_worker_v2] Finished streaming weights to SGLang servers via HTTP API", flush=True)
 
     @torch.no_grad()
     def broadcast_weights_for_collective(self) -> None:
