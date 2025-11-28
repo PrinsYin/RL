@@ -1,13 +1,13 @@
 # GRPO Algorithm Configuration
 grpo:
-  num_prompts_per_step: 8
+  num_prompts_per_step: 16
   num_generations_per_prompt: 4
-  max_rollout_turns: 1 # for multi-turn rollouts. Math Environments just have 1 turn (answering the question)
+  max_rollout_turns: 1 
   max_num_epochs: 1
   max_num_steps: 1000000
   normalize_rewards: true
   use_leave_one_out_baseline: true
-  val_period: 10
+  val_period: 2
   val_at_start: false
   overlong_filtering: false
   max_val_samples: 256
@@ -55,8 +55,8 @@ loss_fn:
   token_level_loss: true
 
 checkpointing:
-  enabled: true
-  checkpoint_dir: "results/grpo"
+  enabled: false
+  checkpoint_dir: "results/grpo1"
   metric_name: "val:accuracy" # one of "val:" or "train:" followed by the metric name
   higher_is_better: true
   keep_top_k: 3
@@ -66,12 +66,12 @@ checkpointing:
   save_consolidated: false
 
 policy:
-  model_name: "Qwen/Qwen2.5-0.5B"
+  model_name: "Qwen/Qwen2.5-1.5B"
   tokenizer:
     name: ${policy.model_name} ## specify if you'd like to use a tokenizer different from the model's default
     chat_template_kwargs: null # can be used to pass kwargs to the chat template, e.g., enable_thinking=true
   hf_config_overrides: {} 
-  train_global_batch_size: 32
+  train_global_batch_size: 64 
   train_micro_batch_size: 1
   generation_batch_size: 8 # Only used when generating using HF backend
   logprob_batch_size: 1
@@ -262,7 +262,7 @@ env:
 
 logger:
   log_dir: "logs"  # Base directory for all logs
-  num_val_samples_to_print: 0 # Number of validation samples to pretty print on terminal
+  num_val_samples_to_print: 3 # Number of validation samples to pretty print on terminal
   wandb_enabled: true
   tensorboard_enabled: false
   mlflow_enabled: false  # Disable MLflow logging
@@ -280,5 +280,5 @@ logger:
     flush_interval: 10  # How often to flush GPU usage metrics to the loggers (in seconds)
 
 cluster:
-  gpus_per_node: 2
+  gpus_per_node: 4
   num_nodes: 1
