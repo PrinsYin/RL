@@ -398,13 +398,21 @@ class SGLangGenerationWorker:
         return new_tokens, new_logprobs
 
     async def _generate_async(self, tasks):
+        """Execute generation tasks with concurrency control.
+        
+        Uses a semaphore to limit the number of concurrent requests per server,
+        preventing server overload.
+        """
+        semaphore = asyncio.Semaphore(self.max_concurrent_requests)
         
         async def wrap(idx, coro):
-            try:
-                result = await coro
-                return idx, result
-            except Exception as e:
-                raise
+            """Wrap a coroutine with semaphore-based concurrency control."""
+            async with semaphore:
+                try:
+                    result = await coro
+                    return idx, result
+                except Exception as e:
+                    raise
 
         wrapped = [wrap(i, t) for i, t in enumerate(tasks)]
         results = [None] * len(tasks)
@@ -500,11 +508,11 @@ class SGLangGenerationWorker:
         
         context_length = self.cfg.get("context_length", None)
         base_max_new_tokens = base_sampling_params["max_new_tokens"]
-        
         if batch_size == 0:
             raise ValueError("Empty batch received")
         
         # Create async tasks for all samples
+        # Adjust max_new_tokens per sample to respect context_length
         tasks = []
         for i in range(batch_size):
             input_len = input_lengths[i].item()
@@ -528,15 +536,13 @@ class SGLangGenerationWorker:
                             f"would exceed context_length ({context_length}). "
                             f"Reducing max_new_tokens to {sample_max_new_tokens} for this sample."
                         )
-            
-            # Create sampling params for this sample (copy base and adjust max_new_tokens)
             sample_sampling_params = base_sampling_params.copy()
             sample_sampling_params["max_new_tokens"] = sample_max_new_tokens
             
             tasks.append(
                 self._generate_single_sample(
                     input_ids=valid_input_ids,
-                    sampling_params=sampling_params,
+                    sampling_params=sample_sampling_params,
                     stop_string=stop_strings[i],
                 )
             )
