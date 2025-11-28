@@ -419,13 +419,20 @@ class SGLangGenerationWorker:
         return new_tokens, new_logprobs
 
     async def _generate_async(self, tasks):
+        """Execute generation tasks with concurrency control.
+        
+        TEMP: Uses a semaphore to limit the number of concurrent requests per server, preventing server overload.
+        A router based solution is preffered in the future.
+        """
+        semaphore = asyncio.Semaphore(self.max_concurrent_requests)
         
         async def wrap(idx, coro):
-            try:
-                result = await coro
-                return idx, result
-            except Exception as e:
-                raise
+            async with semaphore:
+                try:
+                    result = await coro
+                    return idx, result
+                except Exception as e:
+                    raise
 
         wrapped = [wrap(i, t) for i, t in enumerate(tasks)]
         results = [None] * len(tasks)
