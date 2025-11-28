@@ -187,6 +187,10 @@ class SGLangGenerationWorker:
         # to be in a different thread than the one calling it
         self.async_loop_thread = AsyncLoopThread()
         
+        # Maximum concurrent requests per server to avoid overloading
+        # Default to 8 concurrent requests per server
+        self.max_concurrent_requests = config.get("max_concurrent_requests", 8)
+        
         # Only the primary worker (local_rank=0) in each server group starts the SGLang server
         # Secondary workers (local_rank!=0) are just empty placeholders for Ray's resource management
         if not self.is_model_owner:
@@ -360,13 +364,21 @@ class SGLangGenerationWorker:
         return new_tokens, new_logprobs
 
     async def _generate_async(self, tasks):
+        """Execute generation tasks with concurrency control.
+        
+        Uses a semaphore to limit the number of concurrent requests per server,
+        preventing server overload.
+        """
+        semaphore = asyncio.Semaphore(self.max_concurrent_requests)
         
         async def wrap(idx, coro):
-            try:
-                result = await coro
-                return idx, result
-            except Exception as e:
-                raise
+            """Wrap a coroutine with semaphore-based concurrency control."""
+            async with semaphore:
+                try:
+                    result = await coro
+                    return idx, result
+                except Exception as e:
+                    raise
 
         wrapped = [wrap(i, t) for i, t in enumerate(tasks)]
         results = [None] * len(tasks)
@@ -455,31 +467,51 @@ class SGLangGenerationWorker:
         
         # Get generation parameters from config
         max_new_tokens = self.cfg.get("max_new_tokens", 512)
+        context_length = self.cfg.get("context_length", None)
         temperature = 0.0 if greedy else self.cfg.get("temperature", 1.0)
         top_p = self.cfg.get("top_p", 1.0)
         top_k = self.cfg.get("top_k", None)
         
-        sampling_params = {
+        # Base sampling parameters (will be adjusted per sample if needed)
+        base_sampling_params = {
             "temperature": temperature,
             "top_p": top_p,
-            "max_new_tokens": max_new_tokens,
         }
         if top_k is not None:
-            sampling_params["top_k"] = top_k
+            base_sampling_params["top_k"] = top_k
         
         if batch_size == 0:
             raise ValueError("Empty batch received")
         
         # Create async tasks for all samples
+        # Adjust max_new_tokens per sample to respect context_length
         tasks = []
         for i in range(batch_size):
             input_len = input_lengths[i].item()
             valid_input_ids = input_ids[i, :input_len].tolist()
             
+            # Adjust max_new_tokens for this specific sample
+            sample_max_new_tokens = max_new_tokens
+            if context_length is not None:
+                max_allowed_new_tokens = max(0, context_length - input_len - 1)
+                if max_new_tokens > max_allowed_new_tokens:
+                    sample_max_new_tokens = max_allowed_new_tokens
+                    if i == 0:  # Only print warning once per batch
+                        print(
+                            f"[SGLang Worker] Rank {self.global_rank} Warning: "
+                            f"Sample {i} input length ({input_len}) + max_new_tokens ({max_new_tokens}) "
+                            f"would exceed context_length ({context_length}). "
+                            f"Reducing max_new_tokens to {sample_max_new_tokens} for this sample."
+                        )
+            
+            # Create sampling params for this sample
+            sample_sampling_params = base_sampling_params.copy()
+            sample_sampling_params["max_new_tokens"] = sample_max_new_tokens
+            
             tasks.append(
                 self._generate_single_sample(
                     input_ids=valid_input_ids,
-                    sampling_params=sampling_params,
+                    sampling_params=sample_sampling_params,
                     stop_string=stop_strings[i],
                 )
             )
