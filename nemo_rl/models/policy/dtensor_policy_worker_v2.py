@@ -1642,6 +1642,68 @@ class DTensorPolicyWorkerV2:
                 p.data.add_(noise)  # Add noise in-place
         torch.cuda.synchronize()
 
+    @torch.no_grad()
+    def get_weight_statistics(self) -> dict[str, float]:
+        """Get statistics about model weights for verification.
+        
+        Returns:
+            dict: Statistics including mean, std, min, max, and L2 norm of all weights
+        """
+        from nemo_rl.models.policy.dtensor_policy_worker import unshard_fsdp2_model
+        import hashlib
+        
+        stats = {
+            "weight_mean": 0.0,
+            "weight_std": 0.0,
+            "weight_min": float('inf'),
+            "weight_max": float('-inf'),
+            "weight_l2_norm": 0.0,
+            "num_params": 0,
+            "sample_param_hash": "",
+            "sample_param_values": [],
+        }
+        
+        # Unshard model to get full weights
+        with unshard_fsdp2_model(self.model):
+            all_params = []
+            sample_params_collected = []
+            for name, param in self.model.named_parameters():
+                if param.requires_grad:
+                    if isinstance(param, DTensor):
+                        param_tensor = param.full_tensor()
+                    else:
+                        param_tensor = param
+                    # Move to CPU and flatten for statistics
+                    param_flat = param_tensor.detach().cpu().flatten().float()
+                    all_params.append(param_flat)
+                    stats["num_params"] += param_flat.numel()
+                    
+                    # Collect sample values from first few parameters for verification
+                    if len(sample_params_collected) < 3 and param_flat.numel() > 0:
+                        sample_values = param_flat[:min(10, param_flat.numel())].tolist()
+                        sample_params_collected.append({
+                            "name": name,
+                            "values": sample_values
+                        })
+            
+            if all_params:
+                all_params_tensor = torch.cat(all_params)
+                stats["weight_mean"] = all_params_tensor.mean().item()
+                stats["weight_std"] = all_params_tensor.std().item()
+                stats["weight_min"] = all_params_tensor.min().item()
+                stats["weight_max"] = all_params_tensor.max().item()
+                stats["weight_l2_norm"] = torch.norm(all_params_tensor, p=2).item()
+                
+                # Compute hash of first 1000 parameters for quick comparison
+                sample_size = min(1000, all_params_tensor.numel())
+                sample_data = all_params_tensor[:sample_size].numpy().tobytes()
+                stats["sample_param_hash"] = hashlib.md5(sample_data).hexdigest()[:16]
+                
+                # Store sample parameter values
+                stats["sample_param_values"] = sample_params_collected
+        
+        return stats
+
     def return_state_dict(self):
         return self.model.state_dict()
 

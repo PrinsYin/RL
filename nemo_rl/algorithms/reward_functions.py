@@ -79,6 +79,7 @@ def apply_reward_shaping(
     )
 
     updated_rewards = torch.zeros_like(rewards)
+    overlong_penalties = torch.zeros_like(rewards)  # Track penalties for debugging
     for i, message_log in enumerate(batch["message_log"]):
         # Get the assistant response length (index 1 is the assistant response)
         message_response_length = None
@@ -95,9 +96,12 @@ def apply_reward_shaping(
         overlong_reward = min(
             -exceed_length / overlong_buffer_length * overlong_buffer_penalty, 0
         )
+        overlong_penalties[i] = overlong_reward
         updated_rewards[i] = rewards[i] + overlong_reward
 
     # Update the rewards in the batch
     batch["total_reward"] = updated_rewards
+    # Store penalty info for debugging (optional, can be removed if not needed)
+    batch["overlong_penalty"] = overlong_penalties
 
     return batch

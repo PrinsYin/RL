@@ -1089,6 +1089,9 @@ def grpo_train(
     consumed_samples = grpo_save_state[
         "consumed_samples"
     ]  # total samples consumed across all epochs
+    
+    # Initialize weight statistics tracking for verification
+    prev_weight_stats: Optional[dict[str, Any]] = None
     total_valid_tokens = grpo_save_state.get(
         "total_valid_tokens", 0
     )  # total valid tokens processed across all epochs; default to 0 for backward compatibility with older checkpoints
@@ -1221,21 +1224,32 @@ def grpo_train(
                         )
                     policy_generation.finish_generation()
 
+                # Save original rewards before any processing
+                original_rewards = repeated_batch["total_reward"].clone()
+                
+                # Apply reward scaling
                 repeated_batch = scale_rewards(
                     repeated_batch, master_config["grpo"]["reward_scaling"]
                 )
+                scaled_rewards = repeated_batch["total_reward"].clone() if master_config["grpo"]["reward_scaling"]["enabled"] else None
+                
                 # Process rewards with custom reward function
                 if master_config["grpo"]["reward_shaping"]["enabled"]:
                     repeated_batch = apply_reward_shaping(
                         repeated_batch, master_config["grpo"]["reward_shaping"]
                     )
+                    shaped_rewards = repeated_batch["total_reward"].clone()
+                    overlong_penalties = repeated_batch.get("overlong_penalty", None)
+                else:
+                    shaped_rewards = None
+                    overlong_penalties = None
 
                 # Calculate rewards & advantages
                 print("▶ Processing rewards...,", flush=True)
                 with timer.time("reward_calculation"):
                     # Extract rewards from final_batch
                     rewards = repeated_batch["total_reward"]
-
+                    
                     print("▶ Computing advantages...", flush=True)
                     baseline, std = calculate_baseline_and_std_per_prompt(
                         input_ids,
@@ -1245,6 +1259,138 @@ def grpo_train(
                             "use_leave_one_out_baseline"
                         ],
                     )
+                    
+                    # Print detailed reward breakdown grouped by prompt
+                    # Group samples by prompt (same input_ids)
+                    unique_prompts = torch.unique(input_ids, dim=0)
+                    num_prompts_to_print = min(3, len(unique_prompts))
+                    num_generations_per_prompt = master_config["grpo"]["num_generations_per_prompt"]
+                    
+                    print(f"\n📊 Reward Breakdown (grouped by prompt, showing {num_prompts_to_print} prompts):", flush=True)
+                    
+                    for prompt_idx in range(num_prompts_to_print):
+                        # Find all samples with this prompt
+                        matching_prompt = (input_ids == unique_prompts[prompt_idx]).all(dim=1)
+                        prompt_sample_indices = torch.arange(len(input_ids), device=input_ids.device)[matching_prompt]
+                        
+                        if len(prompt_sample_indices) == 0:
+                            continue
+                        
+                        # Get rewards for this prompt group
+                        prompt_original_rewards = original_rewards[prompt_sample_indices]
+                        prompt_final_rewards = rewards[prompt_sample_indices]
+                        prompt_baseline = baseline[prompt_sample_indices[0]].item()
+                        prompt_std = std[prompt_sample_indices[0]].item()
+                        
+                        print(f"\n  Prompt {prompt_idx} (baseline={prompt_baseline:.6f}, std={prompt_std:.6f}):", flush=True)
+                        print(f"    {len(prompt_sample_indices)} responses:", flush=True)
+                        
+                        for local_idx, global_idx in enumerate(prompt_sample_indices[:num_generations_per_prompt]):
+                            reward_components = []
+                            reward_components.append(f"      Response {local_idx}:")
+                            reward_components.append(f"        Original: {prompt_original_rewards[local_idx].item():.6f}")
+                            
+                            if scaled_rewards is not None:
+                                prompt_scaled = scaled_rewards[prompt_sample_indices[local_idx]].item()
+                                reward_components.append(f"        After Scaling: {prompt_scaled:.6f}")
+                                scaling_diff = prompt_scaled - prompt_original_rewards[local_idx].item()
+                                if abs(scaling_diff) > 1e-6:
+                                    reward_components.append(f"          (Scaling Δ: {scaling_diff:+.6f})")
+                            
+                            if shaped_rewards is not None and overlong_penalties is not None:
+                                prompt_shaped = shaped_rewards[prompt_sample_indices[local_idx]].item()
+                                reward_components.append(f"        After Shaping: {prompt_shaped:.6f}")
+                                if scaled_rewards is not None:
+                                    shaping_diff = prompt_shaped - scaled_rewards[prompt_sample_indices[local_idx]].item()
+                                else:
+                                    shaping_diff = prompt_shaped - prompt_original_rewards[local_idx].item()
+                                if abs(shaping_diff) > 1e-6:
+                                    reward_components.append(f"          (Shaping Δ: {shaping_diff:+.6f})")
+                                if abs(overlong_penalties[prompt_sample_indices[local_idx]].item()) > 1e-6:
+                                    reward_components.append(f"          Overlong Penalty: {overlong_penalties[prompt_sample_indices[local_idx]].item():.6f}")
+                            
+                            reward_components.append(f"        Final: {prompt_final_rewards[local_idx].item():.6f}")
+                            
+                            # Calculate advantage
+                            advantage = prompt_final_rewards[local_idx].item() - prompt_baseline
+                            reward_components.append(f"        Advantage: {advantage:+.6f}")
+                            
+                            # Get response length if available
+                            if global_idx < len(repeated_batch["message_log"]):
+                                message_log = repeated_batch["message_log"][global_idx]
+                                for message in message_log:
+                                    if message["role"] == "assistant":
+                                        response_length = message["token_ids"].shape[0]
+                                        reward_components.append(f"        Length: {response_length} tokens")
+                                        break
+                            
+                            print("\n".join(reward_components), flush=True)
+                        
+                        # Summary for this prompt
+                        prompt_reward_mean = prompt_final_rewards[:num_generations_per_prompt].mean().item()
+                        prompt_reward_std = prompt_final_rewards[:num_generations_per_prompt].std().item()
+                        prompt_reward_min = prompt_final_rewards[:num_generations_per_prompt].min().item()
+                        prompt_reward_max = prompt_final_rewards[:num_generations_per_prompt].max().item()
+                        num_correct = (prompt_final_rewards[:num_generations_per_prompt] == 1.0).sum().item()
+                        success_rate = num_correct / num_generations_per_prompt * 100.0
+                        print(f"    Summary: mean={prompt_reward_mean:.6f}, std={prompt_reward_std:.6f}, min={prompt_reward_min:.6f}, max={prompt_reward_max:.6f}", flush=True)
+                        print(f"    Success Rate: {num_correct}/{num_generations_per_prompt} ({success_rate:.1f}%)", flush=True)
+                        
+                        # Show sample responses (one correct, one incorrect if available)
+                        if num_correct > 0:
+                            # Find first correct response
+                            correct_idx = None
+                            for local_idx, global_idx in enumerate(prompt_sample_indices[:num_generations_per_prompt]):
+                                if prompt_final_rewards[local_idx].item() == 1.0:
+                                    correct_idx = global_idx
+                                    break
+                            if correct_idx is not None and correct_idx < len(repeated_batch["message_log"]):
+                                message_log = repeated_batch["message_log"][correct_idx]
+                                for message in message_log:
+                                    if message["role"] == "assistant":
+                                        response_text = message.get("content", "")
+                                        if response_text:
+                                            # Truncate if too long
+                                            if len(response_text) > 200:
+                                                response_text = response_text[:200] + "..."
+                                            print(f"    ✅ Sample Correct Response: {response_text}", flush=True)
+                                        break
+                        
+                        # Find first incorrect response
+                        incorrect_idx = None
+                        for local_idx, global_idx in enumerate(prompt_sample_indices[:num_generations_per_prompt]):
+                            if prompt_final_rewards[local_idx].item() == 0.0:
+                                incorrect_idx = global_idx
+                                break
+                        if incorrect_idx is not None and incorrect_idx < len(repeated_batch["message_log"]):
+                            message_log = repeated_batch["message_log"][incorrect_idx]
+                            for message in message_log:
+                                if message["role"] == "assistant":
+                                    response_text = message.get("content", "")
+                                    if response_text:
+                                        # Truncate if too long
+                                        if len(response_text) > 200:
+                                            response_text = response_text[:200] + "..."
+                                        print(f"    ❌ Sample Incorrect Response: {response_text}", flush=True)
+                                    break
+                    
+                    # Overall statistics
+                    total_samples = len(rewards)
+                    total_correct = (rewards == 1.0).sum().item()
+                    overall_success_rate = total_correct / total_samples * 100.0 if total_samples > 0 else 0.0
+                    zero_std_prompts = (std == 0.0).sum().item()
+                    zero_std_rate = zero_std_prompts / len(unique_prompts) * 100.0 if len(unique_prompts) > 0 else 0.0
+                    
+                    print(f"\n📈 Overall Statistics:", flush=True)
+                    print(f"  • Total Samples: {total_samples}", flush=True)
+                    print(f"  • Correct Responses: {total_correct} ({overall_success_rate:.1f}%)", flush=True)
+                    print(f"  • Prompts with std=0: {zero_std_prompts}/{len(unique_prompts)} ({zero_std_rate:.1f}%)", flush=True)
+                    if zero_std_prompts > 0:
+                        print(f"  ⚠️  Warning: {zero_std_prompts} prompts have std=0, these will not contribute to training!", flush=True)
+                    if overall_success_rate < 10.0:
+                        print(f"  ⚠️  Warning: Very low success rate ({overall_success_rate:.1f}%). Task may be too difficult or model needs more training.", flush=True)
+                    print("", flush=True)
+                    
                     # Apply dynamic sampling to filter prompts with non-zero std (DAPO algorithm)
                     repeated_batch, is_batch_complete, batch_cache, ds_metrics = (
                         dynamic_sampling(
@@ -1350,6 +1496,20 @@ def grpo_train(
                     train_data["prev_logprobs"] = fprop_logprobs
                     train_data["reference_policy_logprobs"] = reference_logprobs
 
+                # 验证：保存训练前的logprobs用于比较
+                logprobs_before_train_sample = None
+                test_sample = None
+                if total_steps % 2 == 0 and train_data.size > 0:
+                    # 获取数据并行shard数量，确保batch size是shards的倍数
+                    dp_size = policy.sharding_annotations.get_axis_size("data_parallel")
+                    # 使用shards的倍数作为batch size，至少为shards
+                    test_batch_size = max(dp_size, 2)  # 至少取2个样本以便比较
+                    if train_data.size >= test_batch_size:
+                        test_sample = train_data.get_batch(batch_idx=0, batch_size=test_batch_size)
+                        logprobs_before_train = policy.get_logprobs(test_sample)["logprobs"]
+                        # 只取第一个样本的前10个token的logprobs用于比较
+                        logprobs_before_train_sample = logprobs_before_train[0, :min(10, logprobs_before_train.shape[1])].cpu()
+
                 print("▶ Preparing for training...", flush=True)
                 with timer.time("training_prep"):
                     policy.prepare_for_training()  # set model train and reload optim to GPU
@@ -1358,6 +1518,57 @@ def grpo_train(
                 print("▶ Training policy...", flush=True)
                 with timer.time("policy_training"):
                     train_results = policy.train(train_data, loss_fn)
+
+                # 添加权重统计验证
+                if total_steps % 2 == 0:
+                    weight_stats = ray.get([
+                        worker.get_weight_statistics.remote() 
+                        for worker in policy.worker_group.workers
+                    ])[0]  # 取rank 0的统计
+                    
+                    # 比较与前一步的权重统计
+                    if prev_weight_stats is not None:
+                        mean_diff = abs(weight_stats['weight_mean'] - prev_weight_stats.get('weight_mean', 0))
+                        std_diff = abs(weight_stats['weight_std'] - prev_weight_stats.get('weight_std', 0))
+                        norm_diff = abs(weight_stats['weight_l2_norm'] - prev_weight_stats.get('weight_l2_norm', 0))
+                        hash_match = weight_stats['sample_param_hash'] == prev_weight_stats.get('sample_param_hash', '')
+                        
+                        print(f"[Weight Stats Step {total_steps + 1}] "
+                              f"mean={weight_stats['weight_mean']:.6f} (Δ={mean_diff:.9f}), "
+                              f"std={weight_stats['weight_std']:.6f} (Δ={std_diff:.9f}), "
+                              f"l2_norm={weight_stats['weight_l2_norm']:.6f} (Δ={norm_diff:.9f}), "
+                              f"hash={weight_stats['sample_param_hash']} (match={hash_match})", flush=True)
+                        
+                        if hash_match:
+                            print(f"⚠️  WARNING: Weight hash unchanged! Weights may not be updating!", flush=True)
+                        
+                        # 打印样本参数值
+                        if weight_stats.get('sample_param_values'):
+                            print(f"[Sample Params] First param values: {weight_stats['sample_param_values'][0]['values'][:5]}", flush=True)
+                    else:
+                        print(f"[Weight Stats Step {total_steps + 1}] "
+                              f"mean={weight_stats['weight_mean']:.6f}, "
+                              f"std={weight_stats['weight_std']:.6f}, "
+                              f"l2_norm={weight_stats['weight_l2_norm']:.6f}, "
+                              f"hash={weight_stats['sample_param_hash']}", flush=True)
+                    
+                    # 保存当前统计用于下一步比较
+                    prev_weight_stats = weight_stats
+                    
+                    # 验证：比较训练前后的logprobs
+                    if logprobs_before_train_sample is not None and test_sample is not None:
+                        policy.prepare_for_lp_inference()
+                        logprobs_after_train = policy.get_logprobs(test_sample)["logprobs"]
+                        logprobs_after_train_sample = logprobs_after_train[0, :min(10, logprobs_after_train.shape[1])].cpu()
+                        
+                        max_diff = torch.max(torch.abs(logprobs_before_train_sample - logprobs_after_train_sample)).item()
+                        mean_diff = torch.mean(torch.abs(logprobs_before_train_sample - logprobs_after_train_sample)).item()
+                        
+                        print(f"[Logprob Change Verification] "
+                              f"Max diff: {max_diff:.6f}, Mean diff: {mean_diff:.6f}", flush=True)
+                        
+                        if max_diff < 1e-6:
+                            print(f"⚠️  WARNING: Logprobs barely changed! Weights may not be updating!", flush=True)
 
                 is_last_step = (total_steps + 1 >= max_num_steps) or (
                     (current_epoch + 1 == max_num_epochs)
@@ -1559,6 +1770,7 @@ def grpo_train(
             print("\n📊 Training Results:")
 
             print(f"  • Loss: {metrics['loss']:.4f}")
+            print(f"  • Grad Norm: {metrics['grad_norm']:.6f}")
             print(f"  • Generation KL Error: {metrics['gen_kl_error']:.4f}")
             if master_config["grpo"]["use_dynamic_sampling"]:
                 print(f"  • Avg Filtered Reward: {np.mean(rewards.numpy()):.4f}")
@@ -1567,6 +1779,7 @@ def grpo_train(
                 )
             else:
                 print(f"  • Avg Reward: {np.mean(rewards.numpy()):.4f}")
+            print(f"  • Advantages - Mean: {metrics['advantages/mean']:.6f}, Max: {metrics['advantages/max']:.6f}, Min: {metrics['advantages/min']:.6f}")
             print(
                 f"  • Mean Generation Length: {rollout_metrics['mean_gen_tokens_per_sample']:.4f}",
                 flush=True,
@@ -2238,9 +2451,20 @@ def async_grpo_train(
                     policy.prepare_for_training()
                     POLICY_GENERATION_STALE = True
 
-                print("▶ Training policy...")
+                print("▶ Training policy...", flush=True)
                 with timer.time("policy_training"):
                     train_results = policy.train(train_data, loss_fn)
+
+                # 添加权重统计验证
+                if total_steps % 2 == 0:  # 每2步打印一次
+                    weight_stats = ray.get([
+                        worker.get_weight_statistics.remote() 
+                        for worker in policy.worker_group.workers
+                    ])[0]  # 取rank 0的统计
+                    print(f"[Weight Stats Step {total_steps + 1}] "
+                          f"mean={weight_stats['weight_mean']:.6f}, "
+                          f"std={weight_stats['weight_std']:.6f}, "
+                          f"l2_norm={weight_stats['weight_l2_norm']:.6f}", flush=True)
 
                 print("🔄 Synchronizing policy weights to trajectory collector…")
                 if NEED_REFIT:
