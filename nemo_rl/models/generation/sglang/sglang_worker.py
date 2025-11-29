@@ -508,6 +508,11 @@ class SGLangGenerationWorker:
         tasks = []
         for i in range(batch_size):
             input_len = input_lengths[i].item()
+            
+            #temp: truncate input if it exceeds context_length
+            if context_length is not None and input_len >= context_length:
+                input_len = context_length - 1
+            
             valid_input_ids = input_ids[i, :input_len].tolist()
             
             # Adjust max_new_tokens for this specific sample
