@@ -523,7 +523,7 @@ class SGLangGenerationWorker:
         for i in range(batch_size):
             input_len = input_lengths[i].item()
             
-            # Truncate input if it exceeds context_length
+            #temp: truncate input if it exceeds context_length
             if context_length is not None and input_len >= context_length:
                 input_len = context_length - 1
             
